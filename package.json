@@ -4,5 +4,8 @@
   "description": "Organize emails in maildir",
   "repository": "https://github.com/nthurow/organize-maildir",
   "author": "Nick Thurow <nthurow@gmail.com>",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "mailparser": "^3.0.1"
+  }
 }
