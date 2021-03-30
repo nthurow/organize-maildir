@@ -46,12 +46,18 @@ async function renderParsedEmails(emailPromises: Promise<ParsedMailStruct>[]) {
     }
 
     parsedMailStructs.forEach(mailDirStruct => {
-      const mailDate = dayjs(mailDirStruct.mail.date).format(
-        'YYYY-MM-DD-HH-mm-ss'
-      );
-      const fileName = `${mailDate}---${
-        mailDirStruct.mail.from?.text || 'no-from'
-      }----${mailDirStruct.mail.subject || 'no-subject'}`;
+      const {mail} = mailDirStruct;
+
+      const mailTo = Array.isArray(mail.to)
+        ? mail.to
+            .slice(0, 5)
+            .map(to => to.text)
+            .join(', ')
+        : mail.to?.text;
+      const mailDate = dayjs(mail.date).format('YYYY-MM-DD-HH-mm-ss');
+      const fileName = `${mailDate}---from:${
+        mail.from?.text || 'no-from'
+      }---to:${mailTo}---subject:${mail.subject || 'no-subject'}`;
       const santizedFileName = sanitize(fileName, {replacement: '++'});
 
       copyFileSync(mailDirStruct.fileName, join(existingDir, santizedFileName));
@@ -68,7 +74,7 @@ const parsedEmails = dirContents
 
     return itemStats.isFile();
   })
-  .slice(0, 25)
+  .slice(0, 1000)
   .map(fileName => {
     return {fileName, fileContents: readFileSync(fileName)};
   })
