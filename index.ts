@@ -1,6 +1,9 @@
 import {join} from 'path';
+import {Transform, Writable} from 'stream';
 import {
-  readFileSync,
+  createReadStream,
+  copyFile,
+  readFile,
   readdirSync,
   statSync,
   existsSync,
@@ -8,89 +11,113 @@ import {
   copyFileSync
 } from 'fs';
 
-import {simpleParser, ParsedMail} from 'mailparser';
+import {
+  simpleParser,
+  ParsedMail,
+  MailParser,
+  Headers,
+  AddressObject
+} from 'mailparser';
 import dayjs from 'dayjs';
 import sanitize from 'sanitize-filename';
 
-interface ParsedMailStruct {
-  fileName: string;
-  fileContents: Buffer;
-  mail: ParsedMail;
-}
+async function process() {
+  const maildirNew = '/home/nthurow/storage/email/Gmail/new';
+  const maildirOut = '/tmp/maildir-out';
 
-const maildirNew = '/home/nthurow/storage/email/Gmail/new';
-const maildirOut = '/tmp/maildir-out';
+  const dirContents = readdirSync(maildirNew);
 
-const dirContents = readdirSync(maildirNew);
+  const mailTransformStream = new Transform({
+    objectMode: true,
+    transform(filePath, encoding, cb) {
+      const parser = new MailParser();
 
-async function renderParsedEmails(emailPromises: Promise<ParsedMailStruct>[]) {
-  const emails = await Promise.all(emailPromises);
-
-  const mailDateMap = emails.reduce<Map<string | number, ParsedMailStruct[]>>(
-    (mailDateMap, mailStruct) => {
-      const year = mailStruct.mail.date
-        ? dayjs(mailStruct.mail.date).year()
-        : 'unknown_date';
-      const existingMails = mailDateMap.get(year) || [];
-
-      return mailDateMap.set(year, [...existingMails, mailStruct]);
-    },
-    new Map()
-  );
-
-  mailDateMap.forEach((parsedMailStructs, date) => {
-    const existingDir = join(maildirOut, date.toString());
-
-    if (!existsSync(existingDir)) {
-      mkdirSync(existingDir);
+      createReadStream(filePath)
+        .pipe(parser)
+        .on('headers', headers => {
+          cb(null, {src: filePath, headers});
+        })
+        .on('error', cb);
     }
+  });
 
-    parsedMailStructs.forEach(mailDirStruct => {
-      const {mail} = mailDirStruct;
+  const generateFileNameStream = new Transform({
+    objectMode: true,
+    transform({src, headers}: {src: string; headers: Headers}, encoding, cb) {
+      const to = headers.get('to') as
+        | AddressObject
+        | AddressObject[]
+        | undefined;
+      const date = headers.get('date') as Date | undefined;
+      const subject = headers.get('subject') as string | undefined;
+      const from = headers.get('from') as AddressObject | undefined;
+      const year = date ? dayjs(date).year().toString() : 'unknown_date';
 
-      const mailTo = Array.isArray(mail.to)
-        ? mail.to
+      const mailTo = Array.isArray(to)
+        ? to
             .slice(0, 5)
-            .map(to => to.text)
+            .map(toAddress => toAddress.text)
             .join(', ')
-        : mail.to?.text;
-      const mailDate = dayjs(mail.date).format('YYYY-MM-DD-HH-mm-ss');
+        : to?.text;
+      const mailDate = dayjs(date).format('YYYY-MM-DD-HH-mm-ss');
       const fileName = `${mailDate}---from:${
-        mail.from?.text || 'no-from'
-      }---to:${mailTo}---subject:${mail.subject || 'no-subject'}`;
+        from?.text || 'no-from'
+      }---to:${mailTo}---subject:${subject || 'no-subject'}`;
       const santizedFileName = sanitize(fileName, {replacement: '++'});
 
-      copyFileSync(mailDirStruct.fileName, join(existingDir, santizedFileName));
-    });
+      cb(null, {src, sub: year, dest: santizedFileName});
+    }
   });
+
+  const moveFileStream = new Writable({
+    objectMode: true,
+    write(
+      {src, dest, sub}: {src: string; dest: string; sub: string},
+      encoding,
+      cb
+    ) {
+      if (!existsSync(join(maildirOut, sub))) {
+        mkdirSync(join(maildirOut, sub));
+      }
+
+      copyFile(src, join(maildirOut, sub, dest), err => {
+        if (err) {
+          return cb(err);
+        }
+
+        this.emit('processed', {src, dest, sub});
+        cb();
+      });
+    }
+  });
+
+  let processedCount = 0;
+  const totalCount = dirContents.length;
+
+  mailTransformStream
+    .pipe(generateFileNameStream)
+    .pipe(moveFileStream)
+    .on('processed', ({src}: {src: string}) => {
+      console.log(`Finished ${++processedCount}/${totalCount} - ${src}`);
+    });
+
+  await dirContents.reduce(async (soFar, item) => {
+    await soFar;
+
+    return new Promise((resolve, reject) => {
+      const res = mailTransformStream.write(join(maildirNew, item));
+
+      if (res === false) {
+        mailTransformStream.once('drain', () => {
+          resolve();
+        });
+      } else {
+        resolve();
+      }
+    });
+  }, Promise.resolve());
+
+  mailTransformStream.end();
 }
 
-const parsedEmails = dirContents
-  .map(itemName => {
-    return join(maildirNew, itemName);
-  })
-  .filter(itemName => {
-    const itemStats = statSync(itemName);
-
-    return itemStats.isFile();
-  })
-  .slice(0, 1000)
-  .map(fileName => {
-    return {fileName, fileContents: readFileSync(fileName)};
-  })
-  .map(fileStruct => {
-    return new Promise<ParsedMailStruct>((resolve, reject) => {
-      simpleParser(fileStruct.fileContents, (err, mail) => {
-        if (!err) {
-          resolve({
-            ...fileStruct,
-            mail
-          });
-        } else {
-          reject(err);
-        }
-      });
-    });
-  });
-
-renderParsedEmails(parsedEmails);
+process();
