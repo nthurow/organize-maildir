@@ -1,13 +1,16 @@
 {
   "name": "organize-maildir",
-  "version": "0.1.0",
+  "version": "0.1.0-next.0",
   "description": "Organize emails in maildir",
   "repository": "https://github.com/nthurow/organize-maildir",
   "author": "Nick Thurow <nthurow@gmail.com>",
   "license": "UNLICENSED",
   "scripts": {
     "start": "ts-node ./index.ts",
-    "build:noemit": "tsc --noEmit"
+    "build": "tsc",
+    "build:noemit": "tsc --noEmit",
+    "clean": "rimraf !(node_modules)/**/*.{d.ts|ts}",
+    "prepack": "yarn build"
   },
   "dependencies": {
     "dayjs": "^1.10.4",
@@ -17,6 +20,7 @@
   "devDependencies": {
     "@types/mailparser": "^3.0.2",
     "prettier": "^2.2.1",
+    "rimraf": "^3.0.2",
     "ts-node": "^9.1.1",
     "typescript": "^4.2.3"
   }
