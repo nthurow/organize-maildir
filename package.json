@@ -7,10 +7,11 @@
   "license": "UNLICENSED",
   "scripts": {
     "start": "ts-node ./index.ts",
-    "build": "tsc",
-    "build:noemit": "tsc --noEmit",
-    "clean": "rimraf !(node_modules)/**/*.{d.ts|ts}",
-    "prepack": "yarn build"
+    "build": "tsc --noEmit",
+    "compile": "tsc",
+    "clean": "rimraf src/**/*.{js,d.ts}",
+    "prepublish": "yarn compile",
+    "postpublish": "yarn clean"
   },
   "dependencies": {
     "dayjs": "^1.10.4",
