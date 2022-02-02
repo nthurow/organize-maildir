@@ -5,6 +5,7 @@
   "repository": "https://github.com/nthurow/organize-maildir",
   "author": "Nick Thurow <nthurow@gmail.com>",
   "license": "UNLICENSED",
+  "bin": "./src/cli.js",
   "scripts": {
     "start": "yarn ts-node ./src/cli.ts",
     "build": "tsc --noEmit",
