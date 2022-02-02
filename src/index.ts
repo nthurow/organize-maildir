@@ -1,30 +1,12 @@
 import {join} from 'path';
 import {Transform, Writable} from 'stream';
-import {
-  createReadStream,
-  copyFile,
-  readFile,
-  readdirSync,
-  statSync,
-  existsSync,
-  mkdirSync,
-  copyFileSync
-} from 'fs';
+import {createReadStream, copyFile, readFile, readdirSync, statSync, existsSync, mkdirSync, copyFileSync} from 'fs';
 
-import {
-  simpleParser,
-  ParsedMail,
-  MailParser,
-  Headers,
-  AddressObject
-} from 'mailparser';
+import {simpleParser, ParsedMail, MailParser, Headers, AddressObject} from 'mailparser';
 import dayjs from 'dayjs';
 import sanitize from 'sanitize-filename';
 
-async function process() {
-  const maildirNew = '/home/nthurow/storage/email/Gmail/new';
-  const maildirOut = '/tmp/maildir-out';
-
+export async function main(maildirNew: string, maildirOut: string) {
   const dirContents = readdirSync(maildirNew);
 
   const mailTransformStream = new Transform({
@@ -34,7 +16,7 @@ async function process() {
 
       createReadStream(filePath)
         .pipe(parser)
-        .on('headers', headers => {
+        .on('headers', (headers) => {
           cb(null, {src: filePath, headers});
         })
         .on('error', cb);
@@ -44,10 +26,7 @@ async function process() {
   const generateFileNameStream = new Transform({
     objectMode: true,
     transform({src, headers}: {src: string; headers: Headers}, encoding, cb) {
-      const to = headers.get('to') as
-        | AddressObject
-        | AddressObject[]
-        | undefined;
+      const to = headers.get('to') as AddressObject | AddressObject[] | undefined;
       const date = headers.get('date') as Date | undefined;
       const subject = headers.get('subject') as string | undefined;
       const from = headers.get('from') as AddressObject | undefined;
@@ -56,13 +35,13 @@ async function process() {
       const mailTo = Array.isArray(to)
         ? to
             .slice(0, 5)
-            .map(toAddress => toAddress.text)
+            .map((toAddress) => toAddress.text)
             .join(', ')
         : to?.text;
       const mailDate = dayjs(date).format('YYYY-MM-DD-HH-mm-ss');
-      const fileName = `${mailDate}---from:${
-        from?.text || 'no-from'
-      }---to:${mailTo}---subject:${subject || 'no-subject'}`;
+      const fileName = `${mailDate}---from:${from?.text || 'no-from'}---to:${mailTo}---subject:${
+        subject || 'no-subject'
+      }`;
       const santizedFileName = sanitize(fileName, {replacement: '++'});
 
       cb(null, {src, sub: year, dest: santizedFileName});
@@ -71,16 +50,12 @@ async function process() {
 
   const moveFileStream = new Writable({
     objectMode: true,
-    write(
-      {src, dest, sub}: {src: string; dest: string; sub: string},
-      encoding,
-      cb
-    ) {
+    write({src, dest, sub}: {src: string; dest: string; sub: string}, encoding, cb) {
       if (!existsSync(join(maildirOut, sub))) {
         mkdirSync(join(maildirOut, sub));
       }
 
-      copyFile(src, join(maildirOut, sub, dest), err => {
+      copyFile(src, join(maildirOut, sub, dest), (err) => {
         if (err) {
           return cb(err);
         }
@@ -119,5 +94,3 @@ async function process() {
 
   mailTransformStream.end();
 }
-
-process();
